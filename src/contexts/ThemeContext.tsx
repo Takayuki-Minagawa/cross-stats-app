@@ -12,8 +12,12 @@ const ThemeContext = createContext<Ctx | null>(null);
 
 function getInitial(): Theme {
   if (typeof window === 'undefined') return 'dark';
-  const stored = window.localStorage.getItem('theme');
-  if (stored === 'dark' || stored === 'light') return stored;
+  try {
+    const stored = window.localStorage.getItem('theme');
+    if (stored === 'dark' || stored === 'light') return stored;
+  } catch {
+    // localStorage がブロックされている環境では読み出しが例外を投げるので既定値へフォールバック
+  }
   try {
     if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
   } catch {

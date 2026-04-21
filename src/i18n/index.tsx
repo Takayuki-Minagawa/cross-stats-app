@@ -12,8 +12,12 @@ const I18nContext = createContext<Ctx | null>(null);
 
 function getInitial(): Lang {
   if (typeof window === 'undefined') return 'ja';
-  const stored = window.localStorage.getItem('lang');
-  if (stored === 'ja' || stored === 'en') return stored;
+  try {
+    const stored = window.localStorage.getItem('lang');
+    if (stored === 'ja' || stored === 'en') return stored;
+  } catch {
+    // localStorage が使えない環境では既定値へフォールバック
+  }
   return 'ja';
 }
 

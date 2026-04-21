@@ -137,6 +137,7 @@ npm run preview    # ビルド成果物をローカルで確認
 | `typecheck` | `tsc -b --noEmit` による型検査 |
 | `build` | TypeScript 型検査 + Vite 本番ビルド |
 | `preview` | `dist/` の静的ファイルをローカルで配信 |
+| `icons` | `public/apple-touch-icon.svg` から iOS 用 PNG (180×180) を再生成 (sharp 使用) |
 
 ---
 
