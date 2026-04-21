@@ -4,6 +4,12 @@
 
 > 本アプリは教育・可視化を目的としています。実務で本格的な統計分析を行う際は、PyMC / statsmodels / lifelines / hmmlearn 等の成熟したライブラリの利用を推奨します。
 
+**UI 機能**
+
+- 🌗 **ダーク / ライト モード切替** (初回起動時は OS 設定に追従、以後は選択を保存)
+- 🌐 **日本語 / English 切替** (選択を保存)
+- 📖 アプリ内「**使い方ガイド**」ページ (日英両対応)
+
 ---
 
 ## 概要
@@ -92,6 +98,12 @@ MCMC・Kaplan–Meier 推定量・ビタビアルゴリズム・OLS (ガウス�
 ├── tsconfig.json (+ app / node)
 └── vite.config.ts
 ```
+
+### 国際化とテーマ
+
+- 言語は `src/i18n/common.ts` に共通辞書、各ページモジュール先頭に `text: { ja, en }` オブジェクトとしてローカル辞書を配置する形で実装しています。新しい言語を追加する場合は、型 `Lang` (`src/i18n/index.tsx`) と両辞書を拡張してください。
+- テーマは `data-theme` 属性と CSS カスタムプロパティで切替。Plotly.js のグリッド色も `useTheme()` を介して同期します (`src/components/Plot.tsx`)。
+- ユーザーの言語・テーマ選択は `localStorage` に `lang` / `theme` キーで保存されます。
 
 ### ページの共通レイアウト
 

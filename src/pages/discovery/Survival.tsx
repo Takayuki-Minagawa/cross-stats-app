@@ -7,8 +7,9 @@ import { StatCard } from '../../components/StatCard';
 import { mulberry32 } from '../../lib/random';
 import { jstat } from '../../lib/stats';
 import { kaplanMeier, SurvivalDatum } from '../../lib/survival';
+import { useLang } from '../../i18n';
+import { t as commonT } from '../../i18n/common';
 
-// 指数分布に従うイベント時間 + 一様分布な打ち切り時間を生成
 function simulateGroup(rng: () => number, n: number, hazard: number, followUp: number): SurvivalDatum[] {
   const data: SurvivalDatum[] = [];
   for (let i = 0; i < n; i++) {
@@ -20,7 +21,6 @@ function simulateGroup(rng: () => number, n: number, hazard: number, followUp: n
   return data;
 }
 
-// 対数順位検定 (log-rank test) の統計量
 function logRankTest(a: SurvivalDatum[], b: SurvivalDatum[]): { chi2: number; pValue: number } {
   const all = [...a, ...b].sort((x, y) => x.time - y.time);
   const eventTimes = Array.from(new Set(all.filter((d) => d.event === 1).map((d) => d.time))).sort(
@@ -44,12 +44,72 @@ function logRankTest(a: SurvivalDatum[], b: SurvivalDatum[]): { chi2: number; pV
     V += isFinite(v) ? v : 0;
   }
   const chi2 = Math.pow(O_A - E_A, 2) / Math.max(V, 1e-10);
-  // 帰無仮説 (ハザード一致) のもとで χ²(1) に従う
   const pValue = 1 - jstat.chisquare.cdf(chi2, 1);
   return { chi2, pValue };
 }
 
+const text = {
+  ja: {
+    title: '生存時間分析',
+    tag: '医学・疫学',
+    ledePrefix: '「イベント (死亡・退会・故障) が起きるまでの時間」を解析する手法。調査期間中にイベントが起きなかった',
+    censored: '打ち切り (censored) データ',
+    censoredTip: '調査終了 / 脱落 / 他要因でイベント発生時点が観測できないデータ',
+    ledeSuffix:
+      'を情報として活かせるのが特徴です。Kaplan–Meier 推定量で生存関数を描画し、対数順位検定で 2 群を比較します。',
+    modelP:
+      'n_i: 時点 t_i でのリスク集合サイズ、d_i: 時点 t_i で発生したイベント数。比例ハザードモデルでは h_B(t) = HR · h_A(t)、したがって S_B(t) = S_A(t)^HR。',
+    slNA: '群 A サンプルサイズ',
+    slNB: '群 B サンプルサイズ',
+    slHA: '群 A ハザード λ_A',
+    slHB: '群 B ハザード λ_B',
+    slFup: '追跡期間 (月)',
+    stHR: 'HR (B/A)',
+    stEvA: (e: number, n: number) => `${e} / ${n}`,
+    stEvLabelA: 'イベント数 A',
+    stEvLabelB: 'イベント数 B',
+    stChi: 'log-rank χ²',
+    stP: 'log-rank p 値',
+    chart: 'グラフ: Kaplan–Meier 生存関数',
+    xAxis: '時間 (月)',
+    yAxis: 'S(t) 生存確率',
+    legA: (h: number) => `群 A (λ=${h.toFixed(3)})`,
+    legB: (h: number) => `群 B (λ=${h.toFixed(3)})`,
+  },
+  en: {
+    title: 'Survival Analysis',
+    tag: 'Medicine / Epidemiology',
+    ledePrefix: 'Analyze the time until an event (death, churn, failure) occurs. Its hallmark is exploiting ',
+    censored: 'censored data',
+    censoredTip: 'Observations where the event time could not be observed due to study end, dropout, etc.',
+    ledeSuffix:
+      ' as information. The Kaplan–Meier estimator draws the survival function and the log-rank test compares two groups.',
+    modelP:
+      'n_i: risk-set size at time t_i. d_i: number of events at t_i. Under proportional hazards h_B(t) = HR · h_A(t), hence S_B(t) = S_A(t)^HR.',
+    slNA: 'Group A sample size',
+    slNB: 'Group B sample size',
+    slHA: 'Group A hazard λ_A',
+    slHB: 'Group B hazard λ_B',
+    slFup: 'Follow-up (months)',
+    stHR: 'HR (B/A)',
+    stEvA: (e: number, n: number) => `${e} / ${n}`,
+    stEvLabelA: 'Events in A',
+    stEvLabelB: 'Events in B',
+    stChi: 'log-rank χ²',
+    stP: 'log-rank p value',
+    chart: 'Graph: Kaplan–Meier survival function',
+    xAxis: 'Time (months)',
+    yAxis: 'S(t) survival probability',
+    legA: (h: number) => `Group A (λ=${h.toFixed(3)})`,
+    legB: (h: number) => `Group B (λ=${h.toFixed(3)})`,
+  },
+} as const;
+
 export function Survival() {
+  const { lang } = useLang();
+  const tr = text[lang];
+  const cmn = commonT(lang);
+
   const [nA, setNA] = useState(80);
   const [nB, setNB] = useState(80);
   const [hazardA, setHazardA] = useState(0.08);
@@ -74,70 +134,40 @@ export function Survival() {
   return (
     <>
       <h1>
-        生存時間分析 <span className="tag discovery">医学・疫学</span>
+        {tr.title} <span className="tag discovery">{tr.tag}</span>
       </h1>
       <p className="lede">
-        「イベント (死亡・退会・故障) が起きるまでの時間」を解析する手法。調査期間中にイベントが起きなかった
-        <span className="tooltip" data-tip="調査終了 / 脱落 / 他要因でイベント発生時点が観測できないデータ">
-          打ち切り (censored) データ
+        {tr.ledePrefix}
+        <span className="tooltip" data-tip={tr.censoredTip}>
+          {tr.censored}
         </span>
-        を情報として活かせるのが特徴です。Kaplan–Meier 推定量で生存関数を描画し、対数順位検定で 2 群を比較します。
+        {tr.ledeSuffix}
       </p>
 
-      <h2>モデル</h2>
-      <MathBlock
-        tex={String.raw`\hat{S}(t) = \prod_{t_i \le t} \left(1 - \frac{d_i}{n_i}\right)`}
-      />
-      <p>
-        <code>n_i</code>: 時点 t_i でのリスク集合サイズ、<code>d_i</code>: 時点 t_i で発生したイベント数。
-        比例ハザードモデルでは <code>h_B(t) = HR · h_A(t)</code>、従って <code>S_B(t) = S_A(t)^HR</code>。
-      </p>
+      <h2>{cmn.sections.model}</h2>
+      <MathBlock tex={String.raw`\hat{S}(t) = \prod_{t_i \le t} \left(1 - \frac{d_i}{n_i}\right)`} />
+      <p>{tr.modelP}</p>
 
-      <h2>パラメータ操作</h2>
+      <h2>{cmn.sections.parameters}</h2>
       <div className="panel">
         <div className="controls">
-          <Slider label="群 A サンプルサイズ" value={nA} min={10} max={400} step={1} onChange={setNA} />
-          <Slider label="群 B サンプルサイズ" value={nB} min={10} max={400} step={1} onChange={setNB} />
-          <Slider
-            label="群 A ハザード λ_A"
-            value={hazardA}
-            min={0.01}
-            max={0.3}
-            step={0.005}
-            onChange={setHazardA}
-          />
-          <Slider
-            label="群 B ハザード λ_B"
-            value={hazardB}
-            min={0.01}
-            max={0.3}
-            step={0.005}
-            onChange={setHazardB}
-          />
-          <Slider
-            label="追跡期間 (月)"
-            value={followUp}
-            min={6}
-            max={72}
-            step={1}
-            onChange={setFollowUp}
-          />
-          <Slider label="乱数シード" value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <Slider label={tr.slNA} value={nA} min={10} max={400} step={1} onChange={setNA} />
+          <Slider label={tr.slNB} value={nB} min={10} max={400} step={1} onChange={setNB} />
+          <Slider label={tr.slHA} value={hazardA} min={0.01} max={0.3} step={0.005} onChange={setHazardA} />
+          <Slider label={tr.slHB} value={hazardB} min={0.01} max={0.3} step={0.005} onChange={setHazardB} />
+          <Slider label={tr.slFup} value={followUp} min={6} max={72} step={1} onChange={setFollowUp} />
+          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
         </div>
         <div className="stats-grid">
-          <StatCard label="HR (B/A)" value={hr.toFixed(3)} tone={hr < 1 ? 'good' : 'warn'} />
-          <StatCard label="イベント数 A" value={`${eventsA} / ${nA}`} />
-          <StatCard label="イベント数 B" value={`${eventsB} / ${nB}`} />
-          <StatCard label="log-rank χ²" value={lr.chi2.toFixed(3)} />
-          <StatCard
-            label="log-rank p 値"
-            value={lr.pValue.toFixed(4)}
-            tone={lr.pValue < 0.05 ? 'good' : 'warn'}
-          />
+          <StatCard label={tr.stHR} value={hr.toFixed(3)} tone={hr < 1 ? 'good' : 'warn'} />
+          <StatCard label={tr.stEvLabelA} value={tr.stEvA(eventsA, nA)} />
+          <StatCard label={tr.stEvLabelB} value={tr.stEvA(eventsB, nB)} />
+          <StatCard label={tr.stChi} value={lr.chi2.toFixed(3)} />
+          <StatCard label={tr.stP} value={lr.pValue.toFixed(4)} tone={lr.pValue < 0.05 ? 'good' : 'warn'} />
         </div>
       </div>
 
-      <h2>グラフ: Kaplan–Meier 生存関数</h2>
+      <h2>{tr.chart}</h2>
       <Plot
         data={[
           {
@@ -146,7 +176,7 @@ export function Survival() {
             type: 'scatter',
             mode: 'lines',
             line: { shape: 'hv', color: '#38bdf8', width: 3 },
-            name: `群 A (λ=${hazardA.toFixed(3)})`,
+            name: tr.legA(hazardA),
           },
           {
             x: kmB.times,
@@ -154,16 +184,13 @@ export function Survival() {
             type: 'scatter',
             mode: 'lines',
             line: { shape: 'hv', color: '#a78bfa', width: 3 },
-            name: `群 B (λ=${hazardB.toFixed(3)})`,
+            name: tr.legB(hazardB),
           },
         ]}
-        layout={{
-          xaxis: { title: '時間 (月)' },
-          yaxis: { title: 'S(t) 生存確率', range: [0, 1.02] },
-        }}
+        layout={{ xaxis: { title: tr.xAxis }, yaxis: { title: tr.yAxis, range: [0, 1.02] } }}
       />
 
-      <h2>サンプルコード</h2>
+      <h2>{cmn.sections.sampleCode}</h2>
       <CodeBlock
         code={`import numpy as np
 from lifelines import KaplanMeierFitter
@@ -187,11 +214,10 @@ kmfB = KaplanMeierFitter().fit(tB, eB, label='B')
 ax = kmfA.plot_survival_function()
 kmfB.plot_survival_function(ax=ax)
 
-# log-rank test
 res = logrank_test(tA, tB, event_observed_A=eA, event_observed_B=eB)
 print(f"chi2 = {res.test_statistic:.3f}, p = {res.p_value:.4f}")
 
-# Cox 比例ハザード (共変量がある場合)
+# Cox proportional hazards when covariates are present:
 # from lifelines import CoxPHFitter`}
       />
     </>

@@ -1,6 +1,7 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
+import { Guide } from './pages/Guide';
 import { TTest } from './pages/classical/TTest';
 import { ANOVA } from './pages/classical/ANOVA';
 import { Regression } from './pages/classical/Regression';
@@ -17,6 +18,7 @@ export function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
+          <Route path="/guide" element={<Guide />} />
           <Route path="/classical/t-test" element={<TTest />} />
           <Route path="/classical/anova" element={<ANOVA />} />
           <Route path="/classical/regression" element={<Regression />} />

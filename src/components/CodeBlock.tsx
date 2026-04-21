@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useLang } from '../i18n';
+import { t } from '../i18n/common';
 
 type Props = {
   code: string;
@@ -8,6 +10,8 @@ type Props = {
 
 export function CodeBlock({ code, language = 'python', title }: Props) {
   const [copied, setCopied] = useState(false);
+  const { lang } = useLang();
+  const m = t(lang);
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -22,7 +26,7 @@ export function CodeBlock({ code, language = 'python', title }: Props) {
       <div className="code-header">
         <span>{title ? `${title} (${language})` : language}</span>
         <button onClick={onCopy} type="button">
-          {copied ? 'コピー済' : 'コピー'}
+          {copied ? m.copied : m.copy}
         </button>
       </div>
       <pre className="code">

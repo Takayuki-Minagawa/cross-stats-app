@@ -6,13 +6,73 @@ import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
 import { mulberry32, normal } from '../../lib/random';
 import { mean, variance } from '../../lib/stats';
+import { useLang } from '../../i18n';
+import { t as commonT } from '../../i18n/common';
 
-// 階層ベイズの「部分プーリング」を、正規-正規共役モデルの閉形式で近似デモする。
-// 各群の事前: θ_j ~ N(μ, τ²)、観測 y_j ~ N(θ_j, σ²/n_j)
-// 事後 θ_j | y_j = w * ybar_j + (1 - w) * μ, w = (1/σ²·n_j) / (1/σ²·n_j + 1/τ²)
-// μ, τ は経験ベイズで推定 (シュリンケージ係数だけ可視化する簡易版)
+const text = {
+  ja: {
+    title: '階層ベイズ',
+    ledePrefix:
+      '群ごとの平均 θ_j を共通の上位分布 N(μ, τ²) から生成するモデル。完全プーリング (全群同じ) と無プーリング (各群独立) の中間として、データが少ない群ほど全体平均に「縮める」',
+    shrink: 'シュリンケージ',
+    shrinkTip: "Stein's paradox: 無プーリング推定量は 3 群以上で総 MSE が大きい",
+    ledeSuffix: 'が働きます。',
+    modelP:
+      '正規-正規共役を使った閉形式近似: 事後平均 θ_j = w_j ȳ_j + (1 − w_j) μ、 w_j = (n_j/σ²) / (n_j/σ² + 1/τ²)。 w_j は群サイズが小さいほど 0 に近づき、全体平均への縮みが強くなります。',
+    slJ: '群数 J',
+    slMinN: '群サイズ下限',
+    slMaxN: '群サイズ上限',
+    slMu: '真の μ',
+    slTau: '真の τ (群間ばらつき)',
+    slSigma: 'σ (群内ばらつき)',
+    slTauA: 'モデル仮定の τ',
+    slTauATip: 'モデル側の事前分布の幅。小さいほどシュリンケージが強くなる',
+    stGm: '全体平均 ȳ',
+    stVar: '群平均の分散',
+    stMse: 'MSE (無プーリング vs 完全プーリング)',
+    chart: 'グラフ: 3 手法の推定比較',
+    xAxis: '群 index',
+    yAxis: '推定 θ',
+    legNoPool: '無プーリング ȳ_j',
+    legPartial: '部分プーリング',
+    legFull: '完全プーリング',
+    groupSizes: (ns: number[]) => `群サイズ (n_j): [${ns.join(', ')}]`,
+  },
+  en: {
+    title: 'Hierarchical Bayes',
+    ledePrefix:
+      'A model where per-group means θ_j are drawn from a common higher-level distribution N(μ, τ²). Between complete pooling (all groups identical) and no pooling (each independent), smaller groups get pulled harder toward the overall mean — known as ',
+    shrink: 'shrinkage',
+    shrinkTip: "Stein's paradox: with ≥3 groups, the no-pooling estimator has larger total MSE",
+    ledeSuffix: '.',
+    modelP:
+      'Closed-form approximation using normal–normal conjugacy: posterior mean θ_j = w_j ȳ_j + (1 − w_j) μ, with w_j = (n_j/σ²) / (n_j/σ² + 1/τ²). Smaller groups pull w_j toward 0, strengthening shrinkage toward the overall mean.',
+    slJ: 'Number of groups J',
+    slMinN: 'Group size lower bound',
+    slMaxN: 'Group size upper bound',
+    slMu: 'True μ',
+    slTau: 'True τ (between-group SD)',
+    slSigma: 'σ (within-group SD)',
+    slTauA: 'Assumed τ in the model',
+    slTauATip: 'Width of the hierarchical prior. Smaller implies stronger shrinkage',
+    stGm: 'Overall mean ȳ',
+    stVar: 'Variance of group means',
+    stMse: 'MSE (no-pool vs complete-pool)',
+    chart: 'Graph: Comparison of three estimators',
+    xAxis: 'Group index',
+    yAxis: 'Estimated θ',
+    legNoPool: 'No pooling ȳ_j',
+    legPartial: 'Partial pooling',
+    legFull: 'Complete pooling',
+    groupSizes: (ns: number[]) => `Group sizes (n_j): [${ns.join(', ')}]`,
+  },
+} as const;
 
 export function Hierarchical() {
+  const { lang } = useLang();
+  const tr = text[lang];
+  const cmn = commonT(lang);
+
   const [nGroups, setNGroups] = useState(8);
   const [minN, setMinN] = useState(3);
   const [maxN, setMaxN] = useState(40);
@@ -58,62 +118,49 @@ export function Hierarchical() {
   return (
     <>
       <h1>
-        階層ベイズ <span className="tag bayes">ベイズ</span>
+        {tr.title} <span className="tag bayes">{cmn.tags.bayes}</span>
       </h1>
       <p className="lede">
-        群ごとの平均 <code>θ_j</code> を共通の上位分布 <code>N(μ, τ²)</code>{' '}
-        から生成するモデル。完全プーリング (全群同じ) と無プーリング (各群独立) の中間として、
-        データが少ない群ほど全体平均に「縮める」
-        <span className="tooltip" data-tip="Stein's paradox: 無プーリング推定量は 3 群以上で総 MSE が大きい">
-          シュリンケージ
+        {tr.ledePrefix}
+        <span className="tooltip" data-tip={tr.shrinkTip}>
+          {tr.shrink}
         </span>
-        が働きます。
+        {tr.ledeSuffix}
       </p>
 
-      <h2>モデル</h2>
+      <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`\mu \sim N(0, 10^2), \quad \tau \sim \mathrm{HalfNormal}(2)`} />
       <MathBlock tex={String.raw`\theta_j \sim N(\mu, \tau^2), \quad y_{ij} \sim N(\theta_j, \sigma^2)`} />
-      <p>
-        正規-正規共役を使った閉形式近似: 事後平均 θ_j = w_j ȳ_j + (1 − w_j) μ
-        、 w_j = (n_j/σ²) / (n_j/σ² + 1/τ²)。 w_j は群サイズが小さいほど 0 に近づき、
-        全体平均への縮みが強くなります。
-      </p>
+      <p>{tr.modelP}</p>
 
-      <h2>パラメータ操作</h2>
+      <h2>{cmn.sections.parameters}</h2>
       <div className="panel">
         <div className="controls">
-          <Slider label="群数 J" value={nGroups} min={3} max={20} step={1} onChange={setNGroups} />
-          <Slider label="群サイズ下限" value={minN} min={1} max={20} step={1} onChange={setMinN} />
-          <Slider label="群サイズ上限" value={maxN} min={5} max={100} step={1} onChange={setMaxN} />
-          <Slider label="真の μ" value={mu0} min={-2} max={2} step={0.05} onChange={setMu0} />
+          <Slider label={tr.slJ} value={nGroups} min={3} max={20} step={1} onChange={setNGroups} />
+          <Slider label={tr.slMinN} value={minN} min={1} max={20} step={1} onChange={setMinN} />
+          <Slider label={tr.slMaxN} value={maxN} min={5} max={100} step={1} onChange={setMaxN} />
+          <Slider label={tr.slMu} value={mu0} min={-2} max={2} step={0.05} onChange={setMu0} />
+          <Slider label={tr.slTau} value={tau} min={0.1} max={3} step={0.05} onChange={setTau} />
+          <Slider label={tr.slSigma} value={sigma} min={0.2} max={3} step={0.05} onChange={setSigma} />
           <Slider
-            label="真の τ (群間ばらつき)"
-            value={tau}
-            min={0.1}
-            max={3}
-            step={0.05}
-            onChange={setTau}
-          />
-          <Slider label="σ (群内ばらつき)" value={sigma} min={0.2} max={3} step={0.05} onChange={setSigma} />
-          <Slider
-            label="モデル仮定の τ"
+            label={tr.slTauA}
             value={tauAssumed}
             min={0.1}
             max={5}
             step={0.05}
             onChange={setTauAssumed}
-            tooltip="モデル側の事前分布の幅。小さいほどシュリンケージが強くなる"
+            tooltip={tr.slTauATip}
           />
-          <Slider label="乱数シード" value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
         </div>
         <div className="stats-grid">
-          <StatCard label="全体平均 ȳ" value={grandMean.toFixed(3)} />
-          <StatCard label="群平均の分散" value={varBetween.toFixed(3)} />
-          <StatCard label="MSE (無プーリング vs 完全プーリング)" value={mse(noPool, pooled).toFixed(3)} />
+          <StatCard label={tr.stGm} value={grandMean.toFixed(3)} />
+          <StatCard label={tr.stVar} value={varBetween.toFixed(3)} />
+          <StatCard label={tr.stMse} value={mse(noPool, pooled).toFixed(3)} />
         </div>
       </div>
 
-      <h2>グラフ: 3 手法の推定比較</h2>
+      <h2>{tr.chart}</h2>
       <Plot
         data={[
           {
@@ -121,7 +168,7 @@ export function Hierarchical() {
             y: noPool,
             mode: 'markers',
             type: 'scatter',
-            name: '無プーリング ȳ_j',
+            name: tr.legNoPool,
             marker: { color: '#38bdf8', size: 10, symbol: 'circle-open' },
           },
           {
@@ -129,7 +176,7 @@ export function Hierarchical() {
             y: shrunk,
             mode: 'markers',
             type: 'scatter',
-            name: '部分プーリング',
+            name: tr.legPartial,
             marker: { color: '#a78bfa', size: 11, symbol: 'diamond' },
           },
           {
@@ -137,21 +184,16 @@ export function Hierarchical() {
             y: pooled,
             mode: 'lines',
             type: 'scatter',
-            name: '完全プーリング',
+            name: tr.legFull,
             line: { color: '#34d399', dash: 'dash' },
           },
         ]}
-        layout={{
-          xaxis: { title: '群 index', dtick: 1 },
-          yaxis: { title: '推定 θ' },
-        }}
+        layout={{ xaxis: { title: tr.xAxis, dtick: 1 }, yaxis: { title: tr.yAxis } }}
       />
 
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-        群サイズ (n_j): [{ns.join(', ')}]
-      </p>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{tr.groupSizes(ns)}</p>
 
-      <h2>サンプルコード</h2>
+      <h2>{cmn.sections.sampleCode}</h2>
       <CodeBlock
         code={`import numpy as np
 import pymc as pm
