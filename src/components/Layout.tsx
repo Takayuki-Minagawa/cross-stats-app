@@ -5,6 +5,7 @@ import { rankIndex, t } from '../i18n/common';
 import { ThemeToggle } from './ThemeToggle';
 import { LangToggle } from './LangToggle';
 import { CommandPalette } from './CommandPalette';
+import { PageErrorBoundary } from './PageErrorBoundary';
 import { categories, topics, topicByPath, totalMissions } from '../topics';
 import { useProgress } from '../contexts/ProgressContext';
 
@@ -191,11 +192,13 @@ export function Layout() {
       </aside>
 
       <main className="main">
-        <Suspense fallback={<PageSkeleton label={m.loading} />}>
-          <div className="page-enter" key={location.pathname}>
-            <Outlet />
-          </div>
-        </Suspense>
+        <PageErrorBoundary key={location.pathname} {...m.pageError}>
+          <Suspense fallback={<PageSkeleton label={m.loading} />}>
+            <div className="page-enter">
+              <Outlet />
+            </div>
+          </Suspense>
+        </PageErrorBoundary>
       </main>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

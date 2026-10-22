@@ -184,9 +184,12 @@ export function CorrelationGame() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter') return;
+      // 長押しの連続発火・IME 変換確定・他 UI (検索パレット等) で処理済みのキーは無視する
+      if (e.key !== 'Enter' || e.repeat || e.isComposing || e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
-      if (target && target.tagName === 'BUTTON') return; // ボタン自身の Enter と二重発火させない
+      // ボタン自身の Enter と二重発火させない。テキスト入力中の Enter も対象外 (スライダーは対象)
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'TEXTAREA')) return;
+      if (target instanceof HTMLInputElement && target.type !== 'range') return;
       if (phase === 'guess') submit();
       else if (phase === 'reveal') next();
     };

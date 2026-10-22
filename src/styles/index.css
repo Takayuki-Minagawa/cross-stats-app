@@ -461,6 +461,20 @@ li {
   }
 }
 
+/* ページ読み込み失敗時の表示 */
+.page-error {
+  max-width: 480px;
+  margin: 12vh auto;
+  text-align: center;
+}
+.page-error-icon {
+  font-size: 2.6rem;
+}
+.page-error p {
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+
 /* 読み込み中スケルトン */
 .skeleton .sk {
   border-radius: 10px;

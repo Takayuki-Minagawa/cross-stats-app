@@ -16,18 +16,37 @@ type Ctx = Progress & {
   reset: () => void;
 };
 
-const STORAGE_KEY = 'progress';
+// 同じオリジン (<user>.github.io) の他アプリと衝突しないよう、アプリ名を接頭辞にする
+const STORAGE_KEY = 'cross-stats:progress';
 const empty: Progress = { visited: [], missions: {}, best: {} };
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+const isString = (v: unknown): v is string => typeof v === 'string';
 
 function load(): Progress {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return empty;
-    const parsed = JSON.parse(raw) as Partial<Progress>;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return empty;
+    // 想定外の形のデータが混ざっていても落ちないよう、要素単位で型を確かめて取り込む
+    const missions: Record<string, string[]> = {};
+    if (isRecord(parsed.missions)) {
+      for (const [page, ids] of Object.entries(parsed.missions)) {
+        if (Array.isArray(ids)) missions[page] = ids.filter(isString);
+      }
+    }
+    const best: Record<string, number> = {};
+    if (isRecord(parsed.best)) {
+      for (const [game, score] of Object.entries(parsed.best)) {
+        if (typeof score === 'number' && Number.isFinite(score)) best[game] = score;
+      }
+    }
     return {
-      visited: Array.isArray(parsed.visited) ? parsed.visited : [],
-      missions: parsed.missions && typeof parsed.missions === 'object' ? parsed.missions : {},
-      best: parsed.best && typeof parsed.best === 'object' ? parsed.best : {},
+      visited: Array.isArray(parsed.visited) ? parsed.visited.filter(isString) : [],
+      missions,
+      best,
     };
   } catch {
     // 破損データや localStorage がブロックされた環境では空の進捗から始める

@@ -75,6 +75,11 @@ export const common = {
     seed: '乱数シード',
     dice: 'ランダムなシードで再生成',
     loading: '読み込み中…',
+    pageError: {
+      title: 'ページを読み込めませんでした',
+      body: 'アプリが更新されたか、オフラインの可能性があります。再読み込みしてください。',
+      reload: '再読み込み',
+    },
   },
   en: {
     brand: 'Cross Stats',
@@ -150,6 +155,11 @@ export const common = {
     seed: 'Random seed',
     dice: 'Regenerate with a random seed',
     loading: 'Loading…',
+    pageError: {
+      title: 'This page failed to load',
+      body: 'The app may have been updated, or you may be offline. Please reload.',
+      reload: 'Reload',
+    },
   },
 } as const;
 
