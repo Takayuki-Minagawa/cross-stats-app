@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
 import { Slider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -39,6 +43,12 @@ const text = {
     legQ: (i: number, a: number, b: number) => `問題 ${i} (a=${a.toFixed(2)}, b=${b.toFixed(2)})`,
     infoNote:
       'I(θ) が高い領域ほど、その能力レベルの受験者を精度良く測れる。識別力 a を上げると対応する難易度 b 付近にピークが鋭く立つのが観察できます。',
+    verdict: (e: string) => `この受験者は 3 問中、平均 ${e} 問正解すると予測されます`,
+    takeExam: '📝 この受験者に解かせてみる',
+    examResult: (k: number) => `結果: ${k} / 3 問正解`,
+    m1: '期待正答数を 2.7 以上にしよう',
+    m2: 'テスト情報量のピークを 3 以上にしよう (高精度なテスト)',
+    m3: '3 問すべての正答確率を 50% ±2% にそろえよう (適応型テストの考え方)',
   },
   en: {
     title: 'Item Response Theory (IRT)',
@@ -66,6 +76,12 @@ const text = {
     legQ: (i: number, a: number, b: number) => `Item ${i} (a=${a.toFixed(2)}, b=${b.toFixed(2)})`,
     infoNote:
       'Higher I(θ) means more precise measurement at that ability level. Increasing a produces a sharper peak near the corresponding difficulty b.',
+    verdict: (e: string) => `This examinee is expected to answer ${e} of 3 items correctly`,
+    takeExam: '📝 Let this examinee take the test',
+    examResult: (k: number) => `Result: ${k} / 3 correct`,
+    m1: 'Raise the expected number correct to 2.7 or more',
+    m2: 'Push the peak of the test information above 3 (a high-precision test)',
+    m3: 'Tune all three items to a 50% ±2% chance of success (the idea behind adaptive testing)',
   },
 } as const;
 
@@ -77,6 +93,7 @@ export function IRT() {
   const [aParams, setA] = useState([1.0, 1.5, 2.0]);
   const [bParams, setB] = useState([-1.0, 0.0, 1.5]);
   const [ability, setAbility] = useState(0.5);
+  const [exam, setExam] = useState<{ answers: boolean[]; n: number } | null>(null);
 
   const thetas = useMemo(() => linspace(-4, 4, 200), []);
   const curves = useMemo(
@@ -100,16 +117,20 @@ export function IRT() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag discovery">{tr.tag}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.model2PLTip}>
-          {tr.model2PL}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="irt"
+        title={tr.title}
+        tagLabel={tr.tag}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.model2PLTip}>
+              {tr.model2PL}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`P(X_{ij} = 1 \mid \theta_i, a_j, b_j) = \frac{1}{1 + \exp\{-a_j(\theta_i - b_j)\}}`} />
@@ -159,7 +180,40 @@ export function IRT() {
             value={predictions.reduce((s, v) => s + v, 0).toFixed(2)}
           />
         </div>
+        <Verdict tone="info" icon="🧑‍🎓">
+          {tr.verdict(predictions.reduce((s, v) => s + v, 0).toFixed(2))}
+        </Verdict>
+        <div className="btn-row">
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() =>
+              setExam((e) => ({ answers: predictions.map((p) => Math.random() < p), n: (e?.n ?? 0) + 1 }))
+            }
+          >
+            {tr.takeExam}
+          </button>
+          {exam && (
+            <span className="exam-result" key={exam.n}>
+              {exam.answers.map((ok, i) => (
+                <span key={i} className={`exam-mark ${ok ? 'ok' : 'ng'}`}>
+                  Q{i + 1} {ok ? '⭕' : '❌'}
+                </span>
+              ))}
+              <strong>{tr.examResult(exam.answers.filter(Boolean).length)}</strong>
+            </span>
+          )}
+        </div>
       </div>
+
+      <Missions
+        page="irt"
+        missions={[
+          { id: 'high-score', text: tr.m1, done: predictions.reduce((s, v) => s + v, 0) >= 2.7 },
+          { id: 'precise', text: tr.m2, done: Math.max(...info) >= 3 },
+          { id: 'adaptive', text: tr.m3, done: predictions.every((p) => Math.abs(p - 0.5) <= 0.02) },
+        ]}
+      />
 
       <h2>{tr.chart1}</h2>
       <Plot
@@ -226,6 +280,7 @@ plt.xlabel('ability theta'); plt.ylabel('P(correct)'); plt.legend(); plt.show()
 # from girth import twopl_mml
 # est_a, est_b = twopl_mml(response_matrix)`}
       />
+      <PageNav />
     </>
   );
 }

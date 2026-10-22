@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import createPlotlyComponent from 'react-plotly.js/factory';
 import Plotly from 'plotly.js-basic-dist-min';
 import { useTheme } from '../contexts/ThemeContext';
@@ -23,8 +23,23 @@ const baseConfig: PlotlyConfig = {
   modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d'],
 };
 
+// 画面幅が狭いときは凡例をグラフの下に回し、描画領域を確保する
+function useNarrow(): boolean {
+  const query = '(max-width: 600px)';
+  const [narrow, setNarrow] = useState(() => window.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const mql = window.matchMedia?.(query);
+    if (!mql) return;
+    const onChange = () => setNarrow(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 export function Plot({ data, layout = {}, config = {}, height = 380 }: Props) {
   const { theme } = useTheme();
+  const narrow = useNarrow();
 
   const baseLayout = useMemo<PlotlyLayout>(() => {
     const isLight = theme === 'light';
@@ -35,7 +50,7 @@ export function Plot({ data, layout = {}, config = {}, height = 380 }: Props) {
         color: isLight ? '#1a2236' : '#e6edf7',
         family: 'Hiragino Sans, Noto Sans JP, system-ui, sans-serif',
       },
-      margin: { l: 55, r: 20, t: 30, b: 45 },
+      margin: narrow ? { l: 45, r: 10, t: 20, b: 40 } : { l: 55, r: 20, t: 30, b: 45 },
       xaxis: {
         gridcolor: isLight ? '#e2e8f0' : '#1f2d4a',
         zerolinecolor: isLight ? '#cbd5e1' : '#243554',
@@ -48,9 +63,12 @@ export function Plot({ data, layout = {}, config = {}, height = 380 }: Props) {
         linecolor: isLight ? '#94a3b8' : '#334155',
         tickcolor: isLight ? '#94a3b8' : '#475569',
       },
-      legend: { bgcolor: 'rgba(0,0,0,0)' },
+      legend: narrow
+        ? { bgcolor: 'rgba(0,0,0,0)', orientation: 'h', x: 0, y: -0.28, yanchor: 'top' }
+        : { bgcolor: 'rgba(0,0,0,0)' },
+      hoverlabel: { font: { family: 'Hiragino Sans, Noto Sans JP, system-ui, sans-serif' } },
     };
-  }, [theme]);
+  }, [theme, narrow]);
 
   const mergedLayout: PlotlyLayout = {
     ...baseLayout,
@@ -60,8 +78,9 @@ export function Plot({ data, layout = {}, config = {}, height = 380 }: Props) {
   };
   const mergedConfig: PlotlyConfig = { ...baseConfig, ...config };
 
+  const plotHeight = narrow && typeof height === 'number' ? height + 80 : height;
   return (
-    <div style={{ width: '100%', height }}>
+    <div className="plot-wrap" style={{ width: '100%', height: plotHeight }}>
       <PlotlyReact
         data={data}
         layout={mergedLayout}

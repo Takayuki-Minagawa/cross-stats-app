@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -41,6 +45,12 @@ const text = {
     legIdent: 'y = ŷ',
     legEst: '推定±95%CI',
     legTrue: '真値',
+    stVif: 'VIF (分散拡大係数)',
+    verdictOk: (r2: string) => `モデルは y のばらつきの ${r2}% を説明しています。説明変数間の相関は穏やかです`,
+    verdictVif: (vif: string) => `VIF = ${vif} ≥ 5 → 多重共線性が強く、係数の SE が膨らんでいます ⚠️`,
+    m1: '決定係数 R² を 0.95 より大きくしよう',
+    m2: '真の β₁ が |β₁| ≥ 1 なのに、β₁ の p 値を 0.05 より大きくしよう (多重共線性の罠)',
+    m3: '推定 β₂ の符号を真の β₂ (|β₂| ≥ 0.5) と逆にしよう',
   },
   en: {
     title: 'Multiple Regression (OLS)',
@@ -73,6 +83,12 @@ const text = {
     legIdent: 'y = ŷ',
     legEst: 'Estimate ± 95% CI',
     legTrue: 'True value',
+    stVif: 'VIF (variance inflation)',
+    verdictOk: (r2: string) => `The model explains ${r2}% of the variance in y. Predictor correlation is mild`,
+    verdictVif: (vif: string) => `VIF = ${vif} ≥ 5 → strong multicollinearity is inflating coefficient SEs ⚠️`,
+    m1: 'Push R² above 0.95',
+    m2: 'With a real effect |β₁| ≥ 1, make the β₁ p-value exceed 0.05 (the multicollinearity trap)',
+    m3: 'Make the estimated β₂ take the opposite sign of the true β₂ (|β₂| ≥ 0.5)',
   },
 } as const;
 
@@ -102,19 +118,23 @@ export function Regression() {
     }
     return { y: ys, result: ols(Xs, ys) };
   }, [n, beta0, beta1, beta2, noise, collinearity, seed]);
+  const vif = 1 / (1 - collinearity * collinearity);
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag classical">{cmn.tags.classical}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.collinTip}>
-          {tr.collinTerm}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="regression"
+        title={tr.title}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.collinTip}>
+              {tr.collinTerm}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock
@@ -139,8 +159,17 @@ export function Regression() {
             onChange={setCollinearity}
             tooltip={tr.slRhoTip}
           />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {vif >= 5 ? (
+          <Verdict tone="warn" icon="🧲">
+            {tr.verdictVif(vif.toFixed(1))}
+          </Verdict>
+        ) : (
+          <Verdict tone="good" icon="📐">
+            {tr.verdictOk((result.r2 * 100).toFixed(1))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard label={tr.stB0} value={result.coef[0].toFixed(3)} />
           <StatCard label={tr.stB1} value={result.coef[1].toFixed(3)} />
@@ -149,6 +178,7 @@ export function Regression() {
           <StatCard label={tr.stSe2} value={result.se[2].toFixed(3)} />
           <StatCard label={tr.stR2} value={result.r2.toFixed(3)} tone="good" />
           <StatCard label={tr.stSigma} value={result.sigma.toFixed(3)} />
+          <StatCard label={tr.stVif} value={vif.toFixed(2)} tone={vif >= 5 ? 'warn' : 'default'} />
           <StatCard
             label={tr.stP1}
             value={result.pValues[1].toFixed(4)}
@@ -161,6 +191,19 @@ export function Regression() {
           />
         </div>
       </div>
+
+      <Missions
+        page="regression"
+        missions={[
+          { id: 'r2', text: tr.m1, done: result.r2 > 0.95 },
+          { id: 'hidden', text: tr.m2, done: Math.abs(beta1) >= 1 && result.pValues[1] > 0.05 },
+          {
+            id: 'flip',
+            text: tr.m3,
+            done: Math.abs(beta2) >= 0.5 && Math.sign(result.coef[2]) === -Math.sign(beta2),
+          },
+        ]}
+      />
 
       <h2>{tr.chart1}</h2>
       <Plot
@@ -230,6 +273,7 @@ model = sm.OLS(y, X).fit()
 print(model.summary())
 print(model.conf_int(alpha=0.05))`}
       />
+      <PageNav />
     </>
   );
 }

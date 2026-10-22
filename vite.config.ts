@@ -12,5 +12,14 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        // 大きなライブラリは独立したチャンクにして、ブラウザキャッシュを効かせる
+        manualChunks: {
+          plotly: ['plotly.js-basic-dist-min', 'react-plotly.js'],
+          katex: ['katex'],
+        },
+      },
+    },
   },
 });

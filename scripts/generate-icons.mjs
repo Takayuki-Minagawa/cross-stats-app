@@ -1,4 +1,4 @@
-// public/apple-touch-icon.svg を iOS が要求する PNG に変換するスクリプト。
+// アイコン用 SVG を iOS / PWA が要求する PNG に変換するスクリプト。
 // `npm run icons` で再生成できます。sharp (devDependency) に依存。
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -20,3 +20,5 @@ async function render(srcSvg, dstPng, size) {
 }
 
 await render('apple-touch-icon.svg', 'apple-touch-icon.png', 180);
+await render('app-icon.svg', 'icon-192.png', 192);
+await render('app-icon.svg', 'icon-512.png', 512);

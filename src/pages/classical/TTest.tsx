@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -23,7 +27,7 @@ const text = {
     stT: 't 統計量',
     stDf: '自由度',
     stP: 'p 値',
-    stDiff: '平均差',
+    stDiff: '平均差 (B − A)',
     stCiLo: '95% CI 下限',
     stCiHi: '95% CI 上限',
     chart1: 'グラフ 1: 2 群のサンプル分布',
@@ -33,6 +37,11 @@ const text = {
     axisDensity: '密度',
     legGroup: (s: string) => `群 ${s}`,
     legObs: '観測 t',
+    verdictSig: (p: string) => `p = ${p} < 0.05 → 「2 群の平均に差がある」と判断できます (有意)`,
+    verdictNs: (p: string) => `p = ${p} ≥ 0.05 → 差があるとは言い切れません (有意でない)`,
+    m1: 'サンプルサイズ n ≤ 20 で有意 (p < 0.05) にしよう',
+    m2: '真の差を 0 にしたまま有意になるシードを探そう (第一種の過誤)',
+    m3: 'わずかな差 (0 < |差| ≤ 0.2) でも p < 0.01 にしよう',
   },
   en: {
     title: 't-test',
@@ -47,7 +56,7 @@ const text = {
     stT: 't statistic',
     stDf: 'df',
     stP: 'p value',
-    stDiff: 'Mean diff.',
+    stDiff: 'Mean diff. (B − A)',
     stCiLo: '95% CI lower',
     stCiHi: '95% CI upper',
     chart1: 'Graph 1: Sample distributions of the two groups',
@@ -57,6 +66,11 @@ const text = {
     axisDensity: 'Density',
     legGroup: (s: string) => `Group ${s}`,
     legObs: 'Observed t',
+    verdictSig: (p: string) => `p = ${p} < 0.05 → the two means differ (significant)`,
+    verdictNs: (p: string) => `p = ${p} ≥ 0.05 → no convincing evidence of a difference (not significant)`,
+    m1: 'Reach significance (p < 0.05) with n ≤ 20',
+    m2: 'Keep the true difference at 0 and find a seed that is still significant (Type I error)',
+    m3: 'Get p < 0.01 for a tiny effect (0 < |diff| ≤ 0.2)',
   },
 } as const;
 
@@ -73,7 +87,8 @@ export function TTest() {
     const rng = mulberry32(seed);
     const a = sampleNormal(rng, n, 0, sigma);
     const b = sampleNormal(rng, n, delta, sigma);
-    return { sampleA: a, sampleB: b, result: welchTTest(a, b) };
+    // 平均差はスライダーと同じ向き (B − A) で表示する
+    return { sampleA: a, sampleB: b, result: welchTTest(b, a) };
   }, [n, delta, sigma, seed]);
 
   const xs = useMemo(() => linspace(-5, 5, 200), []);
@@ -81,10 +96,7 @@ export function TTest() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag classical">{cmn.tags.classical}</span>
-      </h1>
-      <p className="lede">{tr.lede}</p>
+      <PageHeader topic="tTest" title={tr.title} lede={tr.lede} />
 
       <h2>{cmn.sections.model}</h2>
       <p>{tr.modelDesc}</p>
@@ -106,8 +118,17 @@ export function TTest() {
             tooltip={tr.slDeltaTip}
           />
           <Slider label={tr.slSigma} value={sigma} min={0.2} max={3} step={0.05} onChange={setSigma} />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {result.pValue < 0.05 ? (
+          <Verdict tone="good" icon="✅">
+            {tr.verdictSig(result.pValue.toFixed(4))}
+          </Verdict>
+        ) : (
+          <Verdict tone="warn" icon="🤔">
+            {tr.verdictNs(result.pValue.toFixed(4))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard label={tr.stT} value={result.t.toFixed(3)} />
           <StatCard label={tr.stDf} value={result.df.toFixed(1)} />
@@ -121,6 +142,19 @@ export function TTest() {
           <StatCard label={tr.stCiHi} value={result.ci[1].toFixed(3)} />
         </div>
       </div>
+
+      <Missions
+        page="tTest"
+        missions={[
+          { id: 'small-n', text: tr.m1, done: n <= 20 && result.pValue < 0.05 },
+          { id: 'type1', text: tr.m2, done: delta === 0 && result.pValue < 0.05 },
+          {
+            id: 'tiny-effect',
+            text: tr.m3,
+            done: delta !== 0 && Math.abs(delta) <= 0.2 && result.pValue < 0.01,
+          },
+        ]}
+      />
 
       <h2>{tr.chart1}</h2>
       <Plot
@@ -180,19 +214,20 @@ rng = np.random.default_rng(${seed})
 a = rng.normal(loc=0.0, scale=${sigma.toFixed(2)}, size=${n})
 b = rng.normal(loc=${delta.toFixed(2)}, scale=${sigma.toFixed(2)}, size=${n})
 
-# Welch's t-test (does not assume equal variances)
-t, p = stats.ttest_ind(a, b, equal_var=False)
+# Welch's t-test (does not assume equal variances), difference = B - A
+t, p = stats.ttest_ind(b, a, equal_var=False)
 print(f"t = {t:.3f}, p = {p:.4f}")
 
 # 95% CI for the mean difference
 se = np.sqrt(a.var(ddof=1)/len(a) + b.var(ddof=1)/len(b))
-diff = a.mean() - b.mean()
+diff = b.mean() - a.mean()
 df_num = (a.var(ddof=1)/len(a) + b.var(ddof=1)/len(b))**2
 df_den = (a.var(ddof=1)/len(a))**2/(len(a)-1) + (b.var(ddof=1)/len(b))**2/(len(b)-1)
 df = df_num / df_den
 crit = stats.t.ppf(0.975, df)
 print(f"95% CI: [{diff - crit*se:.3f}, {diff + crit*se:.3f}]")`}
       />
+      <PageNav />
     </>
   );
 }
