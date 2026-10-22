@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -38,6 +42,13 @@ const text = {
     axisValue: '値',
     axisFreq: '頻度',
     legObs: '観測',
+    legTrueLine: '真の値',
+    vGood: (a: string) => `受容率 ${a}: チェーンはほどよく動き回っています 👍`,
+    vLow: (a: string) => `受容率 ${a}: 提案の歩幅が大きすぎて棄却ばかり。チェーンが止まりがちです`,
+    vHigh: (a: string) => `受容率 ${a}: 歩幅が小さすぎて探索がゆっくり。トレースがのっぺりします`,
+    m1: '提案分布 SD を大きくして受容率を 0.1 未満にしよう (動かないチェーン)',
+    m2: '提案分布 SD を小さくして受容率を 0.9 以上にしよう (亀の歩み)',
+    m3: 'β₁ の 95% HDI の幅を 0.15 未満にしよう',
     hdiSummary: (b0: [number, number], b1: [number, number], s: [number, number]) =>
       `95% HDI: β₀ [${b0[0].toFixed(3)}, ${b0[1].toFixed(3)}] / β₁ [${b1[0].toFixed(3)}, ${b1[1].toFixed(3)}] / σ [${s[0].toFixed(3)}, ${s[1].toFixed(3)}]`,
   },
@@ -67,6 +78,13 @@ const text = {
     axisValue: 'Value',
     axisFreq: 'Frequency',
     legObs: 'Observed',
+    legTrueLine: 'True value',
+    vGood: (a: string) => `Acceptance ${a}: the chain is exploring nicely 👍`,
+    vLow: (a: string) => `Acceptance ${a}: proposals are too bold and mostly rejected — the chain gets stuck`,
+    vHigh: (a: string) => `Acceptance ${a}: steps are tiny, so exploration is slow and the trace looks smooth`,
+    m1: 'Increase the proposal SD until acceptance drops below 0.1 (a stuck chain)',
+    m2: 'Decrease the proposal SD until acceptance exceeds 0.9 (a snail-paced chain)',
+    m3: 'Shrink the β₁ 95% HDI width below 0.15',
     hdiSummary: (b0: [number, number], b1: [number, number], s: [number, number]) =>
       `95% HDI: β₀ [${b0[0].toFixed(3)}, ${b0[1].toFixed(3)}] / β₁ [${b1[0].toFixed(3)}, ${b1[1].toFixed(3)}] / σ [${s[0].toFixed(3)}, ${s[1].toFixed(3)}]`,
   },
@@ -149,10 +167,7 @@ export function MCMCRegression() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag bayes">{cmn.tags.bayes}</span>
-      </h1>
-      <p className="lede">{tr.lede}</p>
+      <PageHeader topic="mcmc" title={tr.title} lede={tr.lede} />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`y_i = \beta_0 + \beta_1 x_i + \varepsilon_i, \ \varepsilon_i \sim N(0, \sigma^2)`} />
@@ -176,8 +191,21 @@ export function MCMCRegression() {
             onChange={setProposalSd}
             tooltip={tr.slPropTip}
           />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {accRate < 0.2 ? (
+          <Verdict tone="warn" icon="🧱">
+            {tr.vLow(accRate.toFixed(2))}
+          </Verdict>
+        ) : accRate > 0.5 ? (
+          <Verdict tone="warn" icon="🐢">
+            {tr.vHigh(accRate.toFixed(2))}
+          </Verdict>
+        ) : (
+          <Verdict tone="good" icon="🔀">
+            {tr.vGood(accRate.toFixed(2))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard
             label={tr.stAcc}
@@ -192,6 +220,15 @@ export function MCMCRegression() {
         </div>
       </div>
 
+      <Missions
+        page="mcmc"
+        missions={[
+          { id: 'stuck', text: tr.m1, done: accRate < 0.1 },
+          { id: 'snail', text: tr.m2, done: accRate > 0.9 },
+          { id: 'precise', text: tr.m3, done: b1Hdi[1] - b1Hdi[0] < 0.15 },
+        ]}
+      />
+
       <h2>{tr.chart1}</h2>
       <Plot
         data={[
@@ -201,6 +238,14 @@ export function MCMCRegression() {
             mode: 'lines',
             line: { color: '#38bdf8', width: 1 },
             name: 'β₁',
+          },
+          {
+            x: [0, b1Samples.length - 1],
+            y: [trueBeta1, trueBeta1],
+            type: 'scatter',
+            mode: 'lines',
+            line: { color: '#f59e0b', dash: 'dash', width: 2 },
+            name: tr.legTrueLine,
           },
         ]}
         layout={{ xaxis: { title: tr.axisIter }, yaxis: { title: 'β₁' } }}
@@ -248,6 +293,14 @@ export function MCMCRegression() {
             name: tr.legObs,
             marker: { color: theme === 'light' ? '#1a2236' : '#f8fafc', size: 6 },
           },
+          {
+            x: [xLine[0], xLine[xLine.length - 1]],
+            y: [trueBeta0 + trueBeta1 * xLine[0], trueBeta0 + trueBeta1 * xLine[xLine.length - 1]],
+            type: 'scatter',
+            mode: 'lines',
+            name: tr.legTrueLine,
+            line: { color: '#f59e0b', dash: 'dash', width: 2 },
+          },
         ]}
         layout={{ xaxis: { title: 'x' }, yaxis: { title: 'y' } }}
       />
@@ -275,6 +328,7 @@ print(az.summary(idata, hdi_prob=0.95))
 az.plot_trace(idata)
 az.plot_posterior(idata, hdi_prob=0.95)`}
       />
+      <PageNav />
     </>
   );
 }

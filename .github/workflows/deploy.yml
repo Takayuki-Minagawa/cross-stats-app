@@ -1,8 +1,8 @@
 name: Deploy to GitHub Pages
 
+# 開発中は GitHub Actions の利用量を消費しないよう、push では自動実行しません。
+# 公開したいタイミングで Actions タブから「Run workflow」を押して手動実行してください。
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

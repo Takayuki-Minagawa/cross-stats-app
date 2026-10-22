@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
 import { Slider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -30,6 +34,20 @@ const text = {
     axisDensity: '密度',
     legPrior: (a: number, b: number) => `事前 Beta(${a}, ${b})`,
     legPost: (a: number, b: number) => `事後 Beta(${a.toFixed(1)}, ${b.toFixed(1)})`,
+    legTrue: '真の θ',
+    tossHeader: 'コインを投げてみよう',
+    tossNote: '「真の表確率」を決めてコインを投げると、観測回数が増えて事後分布が真の値に近づいていく様子を観察できます。',
+    slTrue: 'コインの真の表確率 θ',
+    toss1: '🪙 1 回投げる',
+    toss10: '🪙×10 投げる',
+    tossReset: '↺ 観測をリセット',
+    lastHeads: '表!',
+    lastTails: '裏!',
+    lastMany: (h: number, t: number) => `表${h} 裏${t}`,
+    verdict: (lo: string, hi: string) => `θ は 95% の確率で [${lo}, ${hi}] の範囲にあると考えられます (信用区間)`,
+    m1: '95% 信用区間の幅を 0.1 未満にしよう',
+    m2: '事前平均と観測の表の割合を 0.4 以上食い違わせ、事後平均をちょうど両者の中間 (±0.03) に置こう',
+    m3: '一様事前 Beta(1, 1) で表 0 回のとき、事後平均を 0.05 未満にしよう',
   },
   en: {
     title: 'Bayesian Coin Flip',
@@ -52,6 +70,20 @@ const text = {
     axisDensity: 'Density',
     legPrior: (a: number, b: number) => `Prior Beta(${a}, ${b})`,
     legPost: (a: number, b: number) => `Posterior Beta(${a.toFixed(1)}, ${b.toFixed(1)})`,
+    legTrue: 'True θ',
+    tossHeader: 'Flip the coin yourself',
+    tossNote: 'Choose the true heads probability and flip — watch the posterior converge toward the truth as observations accumulate.',
+    slTrue: 'True heads probability θ',
+    toss1: '🪙 Flip once',
+    toss10: '🪙×10 Flip ten',
+    tossReset: '↺ Reset observations',
+    lastHeads: 'Heads!',
+    lastTails: 'Tails!',
+    lastMany: (h: number, t: number) => `H${h} T${t}`,
+    verdict: (lo: string, hi: string) => `θ lies in [${lo}, ${hi}] with 95% probability (credible interval)`,
+    m1: 'Shrink the 95% credible interval width below 0.1',
+    m2: 'Make the prior mean and observed heads ratio disagree by ≥ 0.4, and land the posterior mean exactly halfway (±0.03)',
+    m3: 'With a uniform Beta(1, 1) prior and zero heads, push the posterior mean below 0.05',
   },
 } as const;
 
@@ -64,6 +96,17 @@ export function CoinFlip() {
   const [beta, setBeta] = useState(2);
   const [heads, setHeads] = useState(7);
   const [tails, setTails] = useState(3);
+  const [trueTheta, setTrueTheta] = useState(0.7);
+  const [last, setLast] = useState<{ h: number; times: number; n: number } | null>(null);
+
+  const MAX_OBS = 400;
+  const toss = (times: number) => {
+    let h = 0;
+    for (let i = 0; i < times; i++) if (Math.random() < trueTheta) h++;
+    setHeads((v) => Math.min(MAX_OBS, v + h));
+    setTails((v) => Math.min(MAX_OBS, v + times - h));
+    setLast((l) => ({ h, times, n: (l?.n ?? 0) + 1 }));
+  };
 
   const xs = useMemo(() => linspace(0.001, 0.999, 200), []);
   const prior = useMemo(() => xs.map((x) => dbeta(x, alpha, beta)), [xs, alpha, beta]);
@@ -80,16 +123,19 @@ export function CoinFlip() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag bayes">{cmn.tags.bayes}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.conjugateTip}>
-          {tr.conjugate}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="coinFlip"
+        title={tr.title}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.conjugateTip}>
+              {tr.conjugate}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`\theta \sim \mathrm{Beta}(\alpha, \beta)`} />
@@ -103,9 +149,12 @@ export function CoinFlip() {
         <div className="controls">
           <Slider label={tr.slA} value={alpha} min={0.5} max={30} step={0.5} onChange={setAlpha} />
           <Slider label={tr.slB} value={beta} min={0.5} max={30} step={0.5} onChange={setBeta} />
-          <Slider label={tr.slH} value={heads} min={0} max={200} step={1} onChange={setHeads} />
-          <Slider label={tr.slT} value={tails} min={0} max={200} step={1} onChange={setTails} />
+          <Slider label={tr.slH} value={heads} min={0} max={MAX_OBS} step={1} onChange={setHeads} />
+          <Slider label={tr.slT} value={tails} min={0} max={MAX_OBS} step={1} onChange={setTails} />
         </div>
+        <Verdict tone="info" icon="🎯">
+          {tr.verdict(ci95[0].toFixed(3), ci95[1].toFixed(3))}
+        </Verdict>
         <div className="stats-grid">
           <StatCard label={tr.stA} value={postA.toFixed(2)} />
           <StatCard label={tr.stB} value={postB.toFixed(2)} />
@@ -115,6 +164,78 @@ export function CoinFlip() {
           <StatCard label={tr.stHi} value={ci95[1].toFixed(4)} />
         </div>
       </div>
+
+      <div className="panel toss-panel">
+        <h3 style={{ marginTop: 0 }}>{tr.tossHeader}</h3>
+        <p className="muted-note">{tr.tossNote}</p>
+        <div className="toss-row">
+          <div className="toss-controls">
+            <Slider label={tr.slTrue} value={trueTheta} min={0.05} max={0.95} step={0.05} onChange={setTrueTheta} />
+            <div className="btn-row">
+              <button type="button" className="btn primary" onClick={() => toss(1)}>
+                {tr.toss1}
+              </button>
+              <button type="button" className="btn" onClick={() => toss(10)}>
+                {tr.toss10}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setHeads(0);
+                  setTails(0);
+                  setLast(null);
+                }}
+              >
+                {tr.tossReset}
+              </button>
+            </div>
+          </div>
+          <div className="coin-stage" aria-live="polite">
+            {last ? (
+              <div key={last.n} className={`coin ${last.h * 2 >= last.times ? 'heads' : 'tails'}`}>
+                <span>
+                  {last.times === 1
+                    ? last.h === 1
+                      ? tr.lastHeads
+                      : tr.lastTails
+                    : tr.lastMany(last.h, last.times - last.h)}
+                </span>
+              </div>
+            ) : (
+              <div className="coin idle">
+                <span>?</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Missions
+        page="coinFlip"
+        missions={[
+          { id: 'narrow', text: tr.m1, done: ci95[1] - ci95[0] < 0.1 },
+          {
+            id: 'tug-of-war',
+            text: tr.m2,
+            done: (() => {
+              const nObs = heads + tails;
+              if (nObs === 0) return false;
+              const priorMean = alpha / (alpha + beta);
+              const ratio = heads / nObs;
+              return (
+                Math.abs(priorMean - ratio) >= 0.4 &&
+                Math.abs(postMean - (priorMean + ratio) / 2) <= 0.03
+              );
+            })(),
+          },
+          {
+            id: 'laplace',
+            text: tr.m3,
+            done: alpha === 1 && beta === 1 && heads === 0 && postMean < 0.05,
+          },
+        ]}
+      />
 
       <h2>{tr.chart}</h2>
       <Plot
@@ -136,6 +257,14 @@ export function CoinFlip() {
             name: tr.legPost(postA, postB),
             line: { color: '#a78bfa' },
             fillcolor: 'rgba(167, 139, 250, 0.15)',
+          },
+          {
+            x: [trueTheta, trueTheta],
+            y: [0, Math.max(...posterior, ...prior.filter(Number.isFinite)) * 1.05],
+            type: 'scatter',
+            mode: 'lines',
+            name: tr.legTrue,
+            line: { color: '#f59e0b', dash: 'dash', width: 2 },
           },
         ]}
         layout={{ xaxis: { title: tr.axisTheta }, yaxis: { title: tr.axisDensity } }}
@@ -166,6 +295,7 @@ plt.xlabel("theta"); plt.ylabel("density"); plt.legend(); plt.show()
 print("posterior mean:", post_a / (post_a + post_b))
 print("95% CI:", stats.beta.ppf([0.025, 0.975], post_a, post_b))`}
       />
+      <PageNav />
     </>
   );
 }

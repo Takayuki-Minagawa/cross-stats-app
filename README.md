@@ -6,6 +6,15 @@
 
 **UI 機能**
 
+- 🎯 **ミッション** — 各ページに 3 つずつ (計 27 個)。スライダー操作で条件を満たすと自動達成し、トースト通知と紙吹雪でお祝い
+- 🏅 **進捗と称号** — 達成数に応じて「統計ビギナー」→「統計マスター」へランクアップ。訪問・達成状況はサイドバーとホームに表示 (localStorage に保存)
+- 🎲 **シードのランダム化** — ワンクリックで別の乱数サンプルを生成
+- 💬 **結果のひとこと解説** — p 値・受容率・復号精度などの意味を平易な文章で表示
+- 🪙 **体験型の操作** — コインを実際に投げる (ベイズ更新)、受験者に問題を解かせる (IRT)
+- 🎮 **相関当てゲーム** — 散布図から相関係数を当てるミニゲーム (ライフ・連続ボーナス・ハイスコア)
+- 🔍 **コマンドパレット** — `Ctrl + K` / `⌘ + K` でページ検索
+- 📱 **スマートフォン対応** — ドロワーメニュー、狭い画面向けのグラフ凡例配置
+- 📲 **PWA 対応** — ホーム画面へのインストール、Service Worker によるオフライン閲覧
 - 🌗 **ダーク / ライト モード切替** (初回起動時は OS 設定に追従、以後は選択を保存)
 - 🌐 **日本語 / English 切替** (選択を保存)
 - 📖 アプリ内「**使い方ガイド**」ページ (日英両対応)
@@ -59,7 +68,7 @@
 | グラフ | Plotly.js (`plotly.js-basic-dist-min`) + `react-plotly.js` |
 | 数式レンダリング | KaTeX |
 | 確率分布関数 | jStat |
-| ホスティング | GitHub Pages (GitHub Actions による自動デプロイ) |
+| ホスティング | GitHub Pages (GitHub Actions を手動実行してデプロイ) |
 
 MCMC・Kaplan–Meier 推定量・ビタビアルゴリズム・OLS (ガウス–ジョルダン逆行列) などの**中核アルゴリズムはすべて自前実装**しているため、外部 WASM や追加ランタイムなしでブラウザ内で完結します。
 
@@ -69,15 +78,25 @@ MCMC・Kaplan–Meier 推定量・ビタビアルゴリズム・OLS (ガウス�
 
 ```
 .
-├── .github/workflows/deploy.yml   # GitHub Pages への自動デプロイ
-├── public/favicon.svg
+├── .github/workflows/deploy.yml   # GitHub Pages へのデプロイ (手動実行のみ)
+├── public/
+│   ├── favicon.svg / app-icon.svg # アイコン (PNG は npm run icons で生成)
+│   ├── manifest.webmanifest       # PWA マニフェスト
+│   └── sw.js                      # Service Worker (オフラインキャッシュ)
 ├── src/
-│   ├── App.tsx                    # ルーティング定義
+│   ├── App.tsx                    # ルーティング定義 (各ページは遅延読み込み)
 │   ├── main.tsx                   # エントリーポイント
+│   ├── topics.ts                  # トピック一覧 (アイコン・カテゴリ・難易度)
+│   ├── contexts/                  # テーマ / 進捗 / トースト通知
 │   ├── components/                # 共通 UI コンポーネント
-│   │   ├── Layout.tsx             # サイドバー + メインエリア
+│   │   ├── Layout.tsx             # サイドバー (スマホではドロワー) + メインエリア
+│   │   ├── CommandPalette.tsx     # Ctrl+K のページ検索
+│   │   ├── PageHeader.tsx         # ページ見出し (アイコン・難易度・達成数)
+│   │   ├── Missions.tsx           # ミッション一覧と達成判定
+│   │   ├── Verdict.tsx            # 結果のひとこと解説
+│   │   ├── PageNav.tsx            # 前へ / 次へ
 │   │   ├── Plot.tsx               # Plotly.js ラッパー (ダークテーマ適用)
-│   │   ├── Slider.tsx             # ラベル + 現在値付きレンジスライダー
+│   │   ├── Slider.tsx             # レンジスライダー + 🎲 付きシードスライダー
 │   │   ├── MathBlock.tsx          # KaTeX 数式ブロック
 │   │   ├── CodeBlock.tsx          # コード表示 + ワンクリックコピー
 │   │   └── StatCard.tsx           # 計算結果表示カード
@@ -86,12 +105,14 @@ MCMC・Kaplan–Meier 推定量・ビタビアルゴリズム・OLS (ガウス�
 │   │   ├── stats.ts               # 分布関数・OLS・t 検定・ANOVA・HDI
 │   │   ├── mcmc.ts                # Metropolis–Hastings サンプラ
 │   │   ├── survival.ts            # Kaplan–Meier 推定量
-│   │   └── hmm.ts                 # ビタビアルゴリズム + シミュレータ
+│   │   ├── hmm.ts                 # ビタビアルゴリズム + シミュレータ
+│   │   └── confetti.ts            # 紙吹雪エフェクト (canvas)
 │   ├── pages/
 │   │   ├── Home.tsx
 │   │   ├── classical/             # TTest / ANOVA / Regression
 │   │   ├── bayesian/              # CoinFlip / MCMCRegression / Hierarchical
-│   │   └── discovery/             # IRT / Survival / HMM
+│   │   ├── discovery/             # IRT / Survival / HMM
+│   │   └── play/                  # 相関当てゲーム
 │   └── styles/index.css
 ├── index.html
 ├── package.json
@@ -137,13 +158,13 @@ npm run preview    # ビルド成果物をローカルで確認
 | `typecheck` | `tsc -b --noEmit` による型検査 |
 | `build` | TypeScript 型検査 + Vite 本番ビルド |
 | `preview` | `dist/` の静的ファイルをローカルで配信 |
-| `icons` | `public/apple-touch-icon.svg` から iOS 用 PNG (180×180) を再生成 (sharp 使用) |
+| `icons` | SVG から iOS 用 (180×180)・PWA 用 (192 / 512) の PNG アイコンを再生成 (sharp 使用) |
 
 ---
 
 ## GitHub Pages へのデプロイ
 
-本リポジトリには `.github/workflows/deploy.yml` が同梱されており、`main` ブランチへの push をトリガに以下を自動実行します。
+本リポジトリには `.github/workflows/deploy.yml` が同梱されています。開発中に GitHub Actions の利用量を消費しないよう、**push では自動実行せず、手動実行 (`workflow_dispatch`) のみ**に設定しています。公開したいタイミングで Actions タブから「Run workflow」を押すと、以下を実行します。
 
 1. `npm ci` による再現可能なインストール
 2. TypeScript の型検査
@@ -156,7 +177,11 @@ npm run preview    # ビルド成果物をローカルで確認
 
 1. 本リポジトリを GitHub に push する。
 2. **Settings → Pages** に移動し、Source を **GitHub Actions** に設定する。
-3. `main` への push、もしくは Actions タブからの手動実行でデプロイが走り、`https://<user>.github.io/<repo>/` に公開される。
+3. Actions タブで「Deploy to GitHub Pages」を選び「Run workflow」を押すとデプロイが走り、`https://<user>.github.io/<repo>/` に公開される。
+
+> push のたびに自動公開したくなったら、`deploy.yml` の `on:` に `push: { branches: [main] }` を追加してください。
+
+開発中の動作確認は Actions を使わずローカルで行えます。`npm run build && npm run preview` で本番と同じ構成 (`/cross-stats-app/` 配下、Service Worker 有効) を確認できます。
 
 > ルーティングは `HashRouter` を採用しているため、リロード時の 404 問題を気にする必要はありません。将来的に `BrowserRouter` に切り替えたい場合も、同梱の `404.html` フォールバック生成で対応可能です。
 

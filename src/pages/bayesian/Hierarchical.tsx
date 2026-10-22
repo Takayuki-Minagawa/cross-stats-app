@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -29,7 +33,15 @@ const text = {
     slTauATip: 'モデル側の事前分布の幅。小さいほどシュリンケージが強くなる',
     stGm: '全体平均 ȳ',
     stVar: '群平均の分散',
-    stMse: 'MSE (無プーリング vs 完全プーリング)',
+    stMseNo: 'MSE 無プーリング (対真値)',
+    stMsePartial: 'MSE 部分プーリング (対真値)',
+    stMseFull: 'MSE 完全プーリング (対真値)',
+    legTrue: '真の θ_j',
+    vBetter: (r: string) => `部分プーリングの誤差は無プーリングの ${r}% — 縮めることで推定が改善しています`,
+    vWorse: (r: string) => `部分プーリングの誤差は無プーリングの ${r}% — 仮定した τ が真の値とずれているかも？`,
+    m1: '部分プーリングの MSE を無プーリングの半分未満にしよう',
+    m2: '部分プーリングの推定を完全プーリングとほぼ一致させよう (全群で差 < 0.05)',
+    m3: '部分プーリングが無プーリングに負ける (MSE が 1.2 倍超) 状況を作ろう',
     chart: 'グラフ: 3 手法の推定比較',
     xAxis: '群 index',
     yAxis: '推定 θ',
@@ -57,7 +69,15 @@ const text = {
     slTauATip: 'Width of the hierarchical prior. Smaller implies stronger shrinkage',
     stGm: 'Overall mean ȳ',
     stVar: 'Variance of group means',
-    stMse: 'MSE (no-pool vs complete-pool)',
+    stMseNo: 'MSE no pooling (vs truth)',
+    stMsePartial: 'MSE partial pooling (vs truth)',
+    stMseFull: 'MSE complete pooling (vs truth)',
+    legTrue: 'True θ_j',
+    vBetter: (r: string) => `Partial-pooling error is ${r}% of no-pooling — shrinkage is improving the estimates`,
+    vWorse: (r: string) => `Partial-pooling error is ${r}% of no-pooling — maybe the assumed τ is off?`,
+    m1: 'Make the partial-pooling MSE less than half of the no-pooling MSE',
+    m2: 'Make partial pooling nearly identical to complete pooling (every gap < 0.05)',
+    m3: 'Create a case where partial pooling loses (MSE more than 1.2× no pooling)',
     chart: 'Graph: Comparison of three estimators',
     xAxis: 'Group index',
     yAxis: 'Estimated θ',
@@ -82,11 +102,13 @@ export function Hierarchical() {
   const [tauAssumed, setTauAssumed] = useState(0.8);
   const [seed, setSeed] = useState(3);
 
-  const { groups, ybars, shrunk, noPool, pooled, grandMean } = useMemo(() => {
+  const { groups, ybars, shrunk, noPool, pooled, grandMean, thetas } = useMemo(() => {
     const rng = mulberry32(seed);
     const groupsLocal: number[][] = [];
+    const thetasLocal: number[] = [];
     for (let j = 0; j < nGroups; j++) {
       const theta = normal(rng, mu0, tau);
+      thetasLocal.push(theta);
       const nj = Math.round(minN + (maxN - minN) * rng());
       const g: number[] = [];
       for (let i = 0; i < Math.max(1, nj); i++) g.push(normal(rng, theta, sigma));
@@ -107,26 +129,34 @@ export function Hierarchical() {
       noPool: ybarsLocal,
       pooled: pooledLocal,
       grandMean: grand,
+      thetas: thetasLocal,
     };
   }, [nGroups, minN, maxN, mu0, tau, sigma, tauAssumed, seed]);
 
   const mse = (a: number[], b: number[]) =>
     a.reduce((s, v, i) => s + (v - b[i]) ** 2, 0) / a.length;
   const varBetween = variance(ybars);
+  const mseNo = mse(noPool, thetas);
+  const msePartial = mse(shrunk, thetas);
+  const mseFull = mse(pooled, thetas);
+  const ratio = (msePartial / mseNo) * 100;
   const ns = groups.map((g) => g.length);
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag bayes">{cmn.tags.bayes}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.shrinkTip}>
-          {tr.shrink}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="hierarchical"
+        title={tr.title}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.shrinkTip}>
+              {tr.shrink}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`\mu \sim N(0, 10^2), \quad \tau \sim \mathrm{HalfNormal}(2)`} />
@@ -151,14 +181,42 @@ export function Hierarchical() {
             onChange={setTauAssumed}
             tooltip={tr.slTauATip}
           />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {ratio <= 100 ? (
+          <Verdict tone="good" icon="🧲">
+            {tr.vBetter(ratio.toFixed(0))}
+          </Verdict>
+        ) : (
+          <Verdict tone="warn" icon="🤔">
+            {tr.vWorse(ratio.toFixed(0))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard label={tr.stGm} value={grandMean.toFixed(3)} />
           <StatCard label={tr.stVar} value={varBetween.toFixed(3)} />
-          <StatCard label={tr.stMse} value={mse(noPool, pooled).toFixed(3)} />
+          <StatCard label={tr.stMseNo} value={mseNo.toFixed(3)} />
+          <StatCard
+            label={tr.stMsePartial}
+            value={msePartial.toFixed(3)}
+            tone={msePartial <= mseNo ? 'good' : 'warn'}
+          />
+          <StatCard label={tr.stMseFull} value={mseFull.toFixed(3)} />
         </div>
       </div>
+
+      <Missions
+        page="hierarchical"
+        missions={[
+          { id: 'half', text: tr.m1, done: msePartial < 0.5 * mseNo },
+          {
+            id: 'collapse',
+            text: tr.m2,
+            done: shrunk.every((v) => Math.abs(v - grandMean) < 0.05),
+          },
+          { id: 'backfire', text: tr.m3, done: msePartial > 1.2 * mseNo },
+        ]}
+      />
 
       <h2>{tr.chart}</h2>
       <Plot
@@ -186,6 +244,14 @@ export function Hierarchical() {
             type: 'scatter',
             name: tr.legFull,
             line: { color: '#34d399', dash: 'dash' },
+          },
+          {
+            x: groups.map((_, i) => i + 1),
+            y: thetas,
+            mode: 'markers',
+            type: 'scatter',
+            name: tr.legTrue,
+            marker: { color: '#f59e0b', size: 10, symbol: 'x' },
           },
         ]}
         layout={{ xaxis: { title: tr.xAxis, dtick: 1 }, yaxis: { title: tr.yAxis } }}
@@ -219,6 +285,7 @@ with pm.Model() as hmodel:
 print(az.summary(idata, var_names=["mu", "tau"], hdi_prob=0.95))
 az.plot_forest(idata, var_names=["theta"], hdi_prob=0.95, combined=True)`}
       />
+      <PageNav />
     </>
   );
 }

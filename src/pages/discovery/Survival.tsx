@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
 import { mulberry32 } from '../../lib/random';
 import { jstat } from '../../lib/stats';
-import { kaplanMeier, SurvivalDatum } from '../../lib/survival';
+import { kaplanMeier, KMResult, SurvivalDatum } from '../../lib/survival';
 import { useLang } from '../../i18n';
 import { t as commonT } from '../../i18n/common';
 
@@ -48,6 +52,20 @@ function logRankTest(a: SurvivalDatum[], b: SurvivalDatum[]): { chi2: number; pV
   return { chi2, pValue };
 }
 
+// 打ち切り時点での KM 生存率 (グラフ上に「+」で印を付けるため)
+function censorMarks(data: SurvivalDatum[], km: KMResult): { x: number[]; y: number[] } {
+  const x: number[] = [];
+  const y: number[] = [];
+  for (const d of data) {
+    if (d.event === 1) continue;
+    let s = 1;
+    for (let i = 0; i < km.times.length && km.times[i] <= d.time; i++) s = km.survival[i];
+    x.push(d.time);
+    y.push(s);
+  }
+  return { x, y };
+}
+
 const text = {
   ja: {
     title: '生存時間分析',
@@ -75,6 +93,12 @@ const text = {
     yAxis: 'S(t) 生存確率',
     legA: (h: number) => `群 A (λ=${h.toFixed(3)})`,
     legB: (h: number) => `群 B (λ=${h.toFixed(3)})`,
+    legCensor: (g: string) => `打ち切り (${g})`,
+    vSig: (p: string) => `log-rank p = ${p} < 0.05 → 2 群の生存曲線には差があります`,
+    vNs: (p: string) => `log-rank p = ${p} ≥ 0.05 → 生存曲線の差は偶然の範囲かもしれません`,
+    m1: 'log-rank 検定の p 値を 0.001 未満にしよう',
+    m2: 'HR ≤ 0.7 の効果があるのに、合計 60 人以下で p > 0.05 にしよう (検出力不足)',
+    m3: '群 A のイベント発生を 25% 未満にしよう (ほとんど打ち切り)',
   },
   en: {
     title: 'Survival Analysis',
@@ -102,6 +126,12 @@ const text = {
     yAxis: 'S(t) survival probability',
     legA: (h: number) => `Group A (λ=${h.toFixed(3)})`,
     legB: (h: number) => `Group B (λ=${h.toFixed(3)})`,
+    legCensor: (g: string) => `Censored (${g})`,
+    vSig: (p: string) => `log-rank p = ${p} < 0.05 → the two survival curves differ`,
+    vNs: (p: string) => `log-rank p = ${p} ≥ 0.05 → the difference may be due to chance`,
+    m1: 'Push the log-rank p-value below 0.001',
+    m2: 'With a real effect (HR ≤ 0.7), get p > 0.05 using 60 subjects or fewer in total (low power)',
+    m3: 'Keep events in group A under 25% (mostly censored)',
   },
 } as const;
 
@@ -133,16 +163,20 @@ export function Survival() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag discovery">{tr.tag}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.censoredTip}>
-          {tr.censored}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="survival"
+        title={tr.title}
+        tagLabel={tr.tag}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.censoredTip}>
+              {tr.censored}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`\hat{S}(t) = \prod_{t_i \le t} \left(1 - \frac{d_i}{n_i}\right)`} />
@@ -156,8 +190,17 @@ export function Survival() {
           <Slider label={tr.slHA} value={hazardA} min={0.01} max={0.3} step={0.005} onChange={setHazardA} />
           <Slider label={tr.slHB} value={hazardB} min={0.01} max={0.3} step={0.005} onChange={setHazardB} />
           <Slider label={tr.slFup} value={followUp} min={6} max={72} step={1} onChange={setFollowUp} />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {lr.pValue < 0.05 ? (
+          <Verdict tone="good" icon="✅">
+            {tr.vSig(lr.pValue.toFixed(4))}
+          </Verdict>
+        ) : (
+          <Verdict tone="warn" icon="🤔">
+            {tr.vNs(lr.pValue.toFixed(4))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard label={tr.stHR} value={hr.toFixed(3)} tone={hr < 1 ? 'good' : 'warn'} />
           <StatCard label={tr.stEvLabelA} value={tr.stEvA(eventsA, nA)} />
@@ -166,6 +209,15 @@ export function Survival() {
           <StatCard label={tr.stP} value={lr.pValue.toFixed(4)} tone={lr.pValue < 0.05 ? 'good' : 'warn'} />
         </div>
       </div>
+
+      <Missions
+        page="survival"
+        missions={[
+          { id: 'strong', text: tr.m1, done: lr.pValue < 0.001 },
+          { id: 'low-power', text: tr.m2, done: hr <= 0.7 && nA + nB <= 60 && lr.pValue > 0.05 },
+          { id: 'censored', text: tr.m3, done: eventsA < 0.25 * nA },
+        ]}
+      />
 
       <h2>{tr.chart}</h2>
       <Plot
@@ -185,6 +237,20 @@ export function Survival() {
             mode: 'lines',
             line: { shape: 'hv', color: '#a78bfa', width: 3 },
             name: tr.legB(hazardB),
+          },
+          {
+            ...censorMarks(dataA, kmA),
+            type: 'scatter',
+            mode: 'markers',
+            marker: { symbol: 'line-ns-open', size: 9, color: '#38bdf8' },
+            name: tr.legCensor('A'),
+          },
+          {
+            ...censorMarks(dataB, kmB),
+            type: 'scatter',
+            mode: 'markers',
+            marker: { symbol: 'line-ns-open', size: 9, color: '#a78bfa' },
+            name: tr.legCensor('B'),
           },
         ]}
         layout={{ xaxis: { title: tr.xAxis }, yaxis: { title: tr.yAxis, range: [0, 1.02] } }}
@@ -220,6 +286,7 @@ print(f"chi2 = {res.test_statistic:.3f}, p = {res.p_value:.4f}")
 # Cox proportional hazards when covariates are present:
 # from lifelines import CoxPHFitter`}
       />
+      <PageNav />
     </>
   );
 }

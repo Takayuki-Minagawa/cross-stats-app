@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -35,6 +39,11 @@ const text = {
     axisDensity: '密度',
     legGroup: (i: number) => `群 ${i}`,
     legObs: '観測 F',
+    verdictSig: (p: string) => `p = ${p} < 0.05 → 少なくとも 1 つの群の平均が他と異なります (有意)`,
+    verdictNs: (p: string) => `p = ${p} ≥ 0.05 → 群間の差は偶然の範囲内かもしれません (有意でない)`,
+    m1: 'F 統計量を 15 より大きくしよう',
+    m2: '3 群の真の平均をすべて同じにしたまま有意になるシードを探そう',
+    m3: '真の平均の最大差が 0.3 以下なのに有意 (p < 0.05) にしよう',
   },
   en: {
     title: 'ANOVA',
@@ -62,6 +71,11 @@ const text = {
     axisDensity: 'Density',
     legGroup: (i: number) => `Group ${i}`,
     legObs: 'Observed F',
+    verdictSig: (p: string) => `p = ${p} < 0.05 → at least one group mean differs (significant)`,
+    verdictNs: (p: string) => `p = ${p} ≥ 0.05 → differences may be due to chance (not significant)`,
+    m1: 'Push the F statistic above 15',
+    m2: 'Set all true means equal and find a seed that is still significant',
+    m3: 'Reach p < 0.05 while the largest true mean gap is ≤ 0.3',
   },
 } as const;
 
@@ -95,16 +109,19 @@ export function ANOVA() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag classical">{cmn.tags.classical}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.multiCompareTip}>
-          {tr.multiCompare}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="anova"
+        title={tr.title}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.multiCompareTip}>
+              {tr.multiCompare}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock
@@ -120,8 +137,17 @@ export function ANOVA() {
           <Slider label={tr.slMu2} value={mu2} min={-2} max={2} step={0.05} onChange={setMu2} />
           <Slider label={tr.slMu3} value={mu3} min={-2} max={2} step={0.05} onChange={setMu3} />
           <Slider label={tr.slSigma} value={sigma} min={0.2} max={3} step={0.05} onChange={setSigma} />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
+        {result.pValue < 0.05 ? (
+          <Verdict tone="good" icon="✅">
+            {tr.verdictSig(result.pValue.toFixed(4))}
+          </Verdict>
+        ) : (
+          <Verdict tone="warn" icon="🤔">
+            {tr.verdictNs(result.pValue.toFixed(4))}
+          </Verdict>
+        )}
         <div className="stats-grid">
           <StatCard label={tr.stF} value={result.f.toFixed(3)} />
           <StatCard label={tr.stDf} value={`${result.df1}, ${result.df2}`} />
@@ -135,6 +161,22 @@ export function ANOVA() {
           <StatCard label={tr.stGm} value={result.grandMean.toFixed(3)} />
         </div>
       </div>
+
+      <Missions
+        page="anova"
+        missions={[
+          { id: 'big-f', text: tr.m1, done: result.f > 15 },
+          { id: 'type1', text: tr.m2, done: mu1 === mu2 && mu2 === mu3 && result.pValue < 0.05 },
+          {
+            id: 'small-gap',
+            text: tr.m3,
+            done: (() => {
+              const gap = Math.max(mu1, mu2, mu3) - Math.min(mu1, mu2, mu3);
+              return gap > 0 && gap <= 0.3 + 1e-9 && result.pValue < 0.05;
+            })(),
+          },
+        ]}
+      />
 
       <h2>{tr.chart1}</h2>
       <Plot
@@ -195,6 +237,7 @@ df = pd.DataFrame({
 model = ols('y ~ C(group)', data=df).fit()
 print(sm.stats.anova_lm(model, typ=2))`}
       />
+      <PageNav />
     </>
   );
 }

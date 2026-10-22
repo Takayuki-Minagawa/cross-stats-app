@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Plot } from '../../components/Plot';
-import { Slider } from '../../components/Slider';
+import { Slider, SeedSlider } from '../../components/Slider';
+import { PageHeader } from '../../components/PageHeader';
+import { PageNav } from '../../components/PageNav';
+import { Missions } from '../../components/Missions';
+import { Verdict } from '../../components/Verdict';
 import { MathBlock } from '../../components/MathBlock';
 import { CodeBlock } from '../../components/CodeBlock';
 import { StatCard } from '../../components/StatCard';
@@ -33,7 +37,7 @@ const text = {
     stHeads: '表の比率 (観測)',
     stLoadedTrue: 'Loaded 期間の割合 (真)',
     stLoadedDec: 'Loaded 期間の割合 (復号)',
-    chart1: 'グラフ 1: 観測系列 (表=1 / 裏=0)',
+    chart1: 'グラフ 1: 観測系列 (表=1 / 裏=0、色は真の状態: 青=Fair / 橙=Loaded)',
     chart2: 'グラフ 2: 真の隠れ状態 vs Viterbi 復号',
     axisT: 't',
     axisObs: '観測',
@@ -41,6 +45,12 @@ const text = {
     legObs: '観測',
     legTrue: '真の状態',
     legDec: 'Viterbi 復号',
+    vGood: (a: string) => `復号精度 ${a}% — 観測だけからイカサマ期間をほぼ見抜けています 🕵️`,
+    vMid: (a: string) => `復号精度 ${a}% — ある程度は当たっていますが、見逃しも多めです`,
+    vBad: (a: string) => `復号精度 ${a}% — ほぼ当てずっぽうです。モデルが合っていないかも？`,
+    m1: '系列長 T ≥ 100 で復号精度を 97% 以上にしよう',
+    m2: '推論パラメータを真値から 0.2 以上ずらしても精度 85% 以上を保とう (ロバスト性)',
+    m3: '復号精度を 60% 以下に落としてみよう (見抜けない HMM)',
   },
   en: {
     title: 'Hidden Markov Model (HMM)',
@@ -66,7 +76,7 @@ const text = {
     stHeads: 'Heads ratio (observed)',
     stLoadedTrue: 'Loaded period ratio (true)',
     stLoadedDec: 'Loaded period ratio (decoded)',
-    chart1: 'Graph 1: Observations (heads=1 / tails=0)',
+    chart1: 'Graph 1: Observations (heads=1 / tails=0, colored by true state: blue=Fair / orange=Loaded)',
     chart2: 'Graph 2: True state vs Viterbi decoding',
     axisT: 't',
     axisObs: 'Observation',
@@ -74,6 +84,12 @@ const text = {
     legObs: 'Observed',
     legTrue: 'True state',
     legDec: 'Viterbi decoded',
+    vGood: (a: string) => `Decoding accuracy ${a}% — the loaded stretches are exposed from observations alone 🕵️`,
+    vMid: (a: string) => `Decoding accuracy ${a}% — partly right, but many stretches are missed`,
+    vBad: (a: string) => `Decoding accuracy ${a}% — barely better than guessing. Is the model misspecified?`,
+    m1: 'Reach ≥ 97% decoding accuracy with T ≥ 100',
+    m2: 'Shift an inference parameter ≥ 0.2 from the truth and still keep ≥ 85% accuracy (robustness)',
+    m3: 'Drive the decoding accuracy down to 60% or less (an undetectable HMM)',
   },
 } as const;
 
@@ -126,16 +142,20 @@ export function HMM() {
 
   return (
     <>
-      <h1>
-        {tr.title} <span className="tag discovery">{tr.tag}</span>
-      </h1>
-      <p className="lede">
-        {tr.ledePrefix}
-        <span className="tooltip" data-tip={tr.viterbiTip}>
-          {tr.viterbi}
-        </span>
-        {tr.ledeSuffix}
-      </p>
+      <PageHeader
+        topic="hmm"
+        title={tr.title}
+        tagLabel={tr.tag}
+        lede={
+          <>
+            {tr.ledePrefix}
+            <span className="tooltip" data-tip={tr.viterbiTip}>
+              {tr.viterbi}
+            </span>
+            {tr.ledeSuffix}
+          </>
+        }
+      />
 
       <h2>{cmn.sections.model}</h2>
       <MathBlock tex={String.raw`z_t \in \{\text{Fair}, \text{Loaded}\}, \ P(z_t \mid z_{t-1}) = A_{z_{t-1}, z_t}`} />
@@ -150,7 +170,7 @@ export function HMM() {
           <Slider label={tr.slStayL} value={p_stayLoaded} min={0.5} max={0.99} step={0.01} onChange={setStayLoaded} />
           <Slider label={tr.slHF} value={p_headsFair} min={0.1} max={0.9} step={0.01} onChange={setHeadsFair} />
           <Slider label={tr.slHL} value={p_headsLoaded} min={0.5} max={0.99} step={0.01} onChange={setHeadsLoaded} />
-          <Slider label={cmn.seed} value={seed} min={1} max={999} step={1} onChange={setSeed} />
+          <SeedSlider value={seed} onChange={setSeed} />
         </div>
       </div>
 
@@ -193,7 +213,37 @@ export function HMM() {
           <StatCard label={tr.stLoadedTrue} value={(states.filter((s) => s === 1).length / T).toFixed(3)} />
           <StatCard label={tr.stLoadedDec} value={(decoded.filter((s) => s === 1).length / T).toFixed(3)} />
         </div>
+        {accuracy > 0.85 ? (
+          <Verdict tone="good" icon="🕵️">
+            {tr.vGood((accuracy * 100).toFixed(1))}
+          </Verdict>
+        ) : accuracy > 0.6 ? (
+          <Verdict tone="warn" icon="🔎">
+            {tr.vMid((accuracy * 100).toFixed(1))}
+          </Verdict>
+        ) : (
+          <Verdict tone="bad" icon="🎲">
+            {tr.vBad((accuracy * 100).toFixed(1))}
+          </Verdict>
+        )}
       </div>
+
+      <Missions
+        page="hmm"
+        missions={[
+          { id: 'sharp', text: tr.m1, done: T >= 100 && accuracy >= 0.97 },
+          {
+            id: 'robust',
+            text: tr.m2,
+            done:
+              (Math.abs(inferStayFair - p_stayFair) >= 0.2 - 1e-9 ||
+                Math.abs(inferStayLoaded - p_stayLoaded) >= 0.2 - 1e-9 ||
+                Math.abs(inferHeadsLoaded - p_headsLoaded) >= 0.2 - 1e-9) &&
+              accuracy >= 0.85,
+          },
+          { id: 'fooled', text: tr.m3, done: accuracy <= 0.6 },
+        ]}
+      />
 
       <h2>{tr.chart1}</h2>
       <Plot
@@ -203,7 +253,8 @@ export function HMM() {
             y: obs,
             type: 'bar',
             name: tr.legObs,
-            marker: { color: '#8aa0c5' },
+            // 真の状態で色分け (Fair = 青, Loaded = 橙)
+            marker: { color: states.map((st) => (st === 1 ? '#f59e0b' : '#38bdf8')) },
           },
         ]}
         layout={{ xaxis: { title: tr.axisT }, yaxis: { title: tr.axisObs, range: [-0.1, 1.1], tickvals: [0, 1] } }}
@@ -266,6 +317,7 @@ model.emissionprob_ = B_true
 z_hat = model.predict(x.reshape(-1, 1))
 print("accuracy:", np.mean(z_hat == z_true))`}
       />
+      <PageNav />
     </>
   );
 }
